@@ -1,27 +1,68 @@
+//! The Galois Field can be efficiently computed using log tables.
+//! The log tables used here are a modification of the tables
+//! implemented in the crate 'bardecoder' by piderman314
+//! available here: https://github.com/piderman314/bardecoder/blob/master/src/decode/qr/galois.rs
+
 use std::ops;
 
-#[derive(Copy,Clone,Debug,PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct Byte(u8);
 
 impl Byte {
-    pub fn zero() -> Self {
-        Byte(0)
-    }
-
     pub fn as_inner(self) -> u8 {
         self.0
     }
 }
 
-impl PartialEq<u8> for Byte {
-    fn eq(&self, rhs: &u8) -> bool {
-        self.0 == *rhs
+impl ops::BitXor<Self> for Byte {
+    type Output = Self;
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self::from(self.as_inner() ^ rhs.as_inner())
     }
 }
 
-impl PartialEq<Byte> for u8 {
-    fn eq(&self, rhs: &Byte) -> bool {
-        rhs.0 == *self
+impl ops::Add<Byte> for Byte {
+    type Output = Byte;
+
+    fn add(self, rhs: Byte) -> Byte {
+        self ^ rhs
+    }
+}
+
+impl ops::Sub<Byte> for Byte {
+    type Output = Byte;
+
+    fn sub(self, rhs: Byte) -> Byte {
+        self ^ rhs
+    }
+}
+
+impl ops::Mul<Byte> for Byte {
+    type Output = Byte;
+
+    fn mul(self, rhs: Byte) -> Byte {
+        if self.0 == 0 || rhs.0 == 0 {
+            return EXP8[255];
+        }
+
+        let log_self = LOG8[self.0 as usize];
+        let log_rhs = LOG8[rhs.0 as usize];
+
+        EXP8[((u16::from(log_self) + u16::from(log_rhs)) % 255) as usize]
+    }
+}
+
+impl ops::Div<Byte> for Byte {
+    type Output = Byte;
+
+    fn div(self, rhs: Byte) -> Byte {
+        let log_self = LOG8[self.0 as usize];
+        let log_rhs = LOG8[rhs.0 as usize];
+        let mut diff = i16::from(log_self) - i16::from(log_rhs);
+
+        diff = if diff < 0 { diff + 255 } else { diff };
+
+        EXP8[(diff % 255) as usize]
     }
 }
 
@@ -31,65 +72,382 @@ impl From<u8> for Byte {
     }
 }
 
-impl ops::BitXor<Self> for Byte {
-    type Output = Self;
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        Self::from(self.0 ^ rhs.0)
-    }
-}
-
-impl ops::Sub<Self> for Byte {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        self ^ rhs
-    }
-}   
-
-impl ops::Add<Self> for Byte {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        self ^ rhs
-    }
-}
-
-impl ops::Add<u8> for Byte {
-    type Output = Self;
-    fn add(self, rhs: u8) -> Self::Output {
-        Self::from(self.0 ^ rhs)
-    }
-}
-
-impl ops::Mul<Self> for Byte {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        unimplemented!()
-    }
-}
-
-impl ops::Mul<u8> for Byte {
-    type Output = Self;
-    fn mul(self, rhs: u8) -> Self::Output {
-        Self::from(self.0.wrapping_mul(rhs))
-    }
-}
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
 
-    // tests from https://sites.math.washington.edu/~morrow/336_12/papers/juan.pdf
-    // addition is incorrect in that document
     #[test]
-    fn test_add() {
-        let test: Byte = Byte::from(83) + Byte::from(249);
-        let exp: _ = Byte::from(170);
-        assert_eq!(test, exp);
+    pub fn test_add() {
+        // zero
+        assert_eq!(Byte(0) + Byte(123), Byte(123));
+
+        // inverse sub
+        assert_eq!(Byte(40) + Byte(193), Byte(233));
+
+        // commutativity
+        assert_eq!(Byte(40) + Byte(193), Byte(193) + Byte(40));
+
+        // associativity
+        assert_eq!(
+            (Byte(40) + Byte(193)) + Byte(78),
+            Byte(40) + (Byte(193) + Byte(78))
+        );
     }
 
     #[test]
-    fn test_mul() {
-        let test: Byte = Byte::from(0x53) * Byte::from(0xca);
-        let exp: _ = Byte::from(0x01);
-        assert_eq!(test, exp);
+    pub fn test_sub() {
+        // zero
+        assert_eq!(Byte(123) - Byte(123), Byte(0));
+
+        // inverse add
+        assert_eq!(Byte(233) - Byte(193), Byte(40));
+        assert_eq!(Byte(233) - Byte(40), Byte(193));
+    }
+
+    #[test]
+    pub fn test_mul() {
+        // zero
+        assert_eq!(Byte(40) * Byte(0), Byte(0));
+        assert_eq!(Byte(0) * Byte(40), Byte(0));
+
+        // unit
+        assert_eq!(Byte(40) * Byte(1), Byte(40));
+        assert_eq!(Byte(1) * Byte(40), Byte(40));
+
+        // inverse div
+        assert_eq!(Byte(40) * Byte(193), Byte(67));
+
+        // commutativity
+        assert_eq!(Byte(40) * Byte(193), Byte(193) * Byte(40));
+
+        // associativity
+        assert_eq!(
+            (Byte(40) * Byte(193)) * Byte(78),
+            Byte(40) * (Byte(193) * Byte(78))
+        );
+
+        // distributivity
+        assert_eq!(
+            Byte(40) * (Byte(193) + Byte(78)),
+            Byte(40) * Byte(193) + Byte(40) * Byte(78)
+        );
+    }
+
+    #[test]
+    pub fn test_div() {
+        // unit
+        assert_eq!(Byte(40) / Byte(40), Byte(1));
+        assert_eq!(Byte(40) / Byte(1), Byte(40));
+
+        // inverse mul
+        assert_eq!(Byte(67) / Byte(193), Byte(40));
+        assert_eq!(Byte(67) / Byte(40), Byte(193));
+    }
+
+    #[test]
+    fn test_mul_add_from_aes_test_vectors() {
+        let test: Byte = (Byte(0x02) * Byte(0x87)) 
+            + (Byte(0x03) * Byte(0x6e)) 
+            + Byte(0x46) 
+            + Byte(0xa6);
+        let exp: _ = Byte(47);
+
+        assert_eq!(test, exp)
     }
 }
+
+// exp and log tables with base 2 in Galois Field 2^8 under modulo 0b100011101
+// to generate:
+/*
+let mut log: Vec<u8> = vec![0; 256];
+let mut exp: Vec<u8> = vec![0; 256];
+let modulo: u16 = 0b100011101;
+let mut alpha: u16 = 1;
+for i in 0..255 {
+    exp[i] = (alpha & 0xff) as u8;
+    log[alpha as usize] = u8::from(i);
+    alpha *= 2;
+    if alpha > 255 {
+        alpha ^= modulo
+    }
+}
+*/
+
+pub const EXP8: [Byte; 256] = [
+    Byte(0x01),
+    Byte(0x02),
+    Byte(0x04),
+    Byte(0x08),
+    Byte(0x10),
+    Byte(0x20),
+    Byte(0x40),
+    Byte(0x80),
+    Byte(0x1D),
+    Byte(0x3A),
+    Byte(0x74),
+    Byte(0xE8),
+    Byte(0xCD),
+    Byte(0x87),
+    Byte(0x13),
+    Byte(0x26),
+    Byte(0x4C),
+    Byte(0x98),
+    Byte(0x2D),
+    Byte(0x5A),
+    Byte(0xB4),
+    Byte(0x75),
+    Byte(0xEA),
+    Byte(0xC9),
+    Byte(0x8F),
+    Byte(0x03),
+    Byte(0x06),
+    Byte(0x0C),
+    Byte(0x18),
+    Byte(0x30),
+    Byte(0x60),
+    Byte(0xC0),
+    Byte(0x9D),
+    Byte(0x27),
+    Byte(0x4E),
+    Byte(0x9C),
+    Byte(0x25),
+    Byte(0x4A),
+    Byte(0x94),
+    Byte(0x35),
+    Byte(0x6A),
+    Byte(0xD4),
+    Byte(0xB5),
+    Byte(0x77),
+    Byte(0xEE),
+    Byte(0xC1),
+    Byte(0x9F),
+    Byte(0x23),
+    Byte(0x46),
+    Byte(0x8C),
+    Byte(0x05),
+    Byte(0x0A),
+    Byte(0x14),
+    Byte(0x28),
+    Byte(0x50),
+    Byte(0xA0),
+    Byte(0x5D),
+    Byte(0xBA),
+    Byte(0x69),
+    Byte(0xD2),
+    Byte(0xB9),
+    Byte(0x6F),
+    Byte(0xDE),
+    Byte(0xA1),
+    Byte(0x5F),
+    Byte(0xBE),
+    Byte(0x61),
+    Byte(0xC2),
+    Byte(0x99),
+    Byte(0x2F),
+    Byte(0x5E),
+    Byte(0xBC),
+    Byte(0x65),
+    Byte(0xCA),
+    Byte(0x89),
+    Byte(0x0F),
+    Byte(0x1E),
+    Byte(0x3C),
+    Byte(0x78),
+    Byte(0xF0),
+    Byte(0xFD),
+    Byte(0xE7),
+    Byte(0xD3),
+    Byte(0xBB),
+    Byte(0x6B),
+    Byte(0xD6),
+    Byte(0xB1),
+    Byte(0x7F),
+    Byte(0xFE),
+    Byte(0xE1),
+    Byte(0xDF),
+    Byte(0xA3),
+    Byte(0x5B),
+    Byte(0xB6),
+    Byte(0x71),
+    Byte(0xE2),
+    Byte(0xD9),
+    Byte(0xAF),
+    Byte(0x43),
+    Byte(0x86),
+    Byte(0x11),
+    Byte(0x22),
+    Byte(0x44),
+    Byte(0x88),
+    Byte(0x0D),
+    Byte(0x1A),
+    Byte(0x34),
+    Byte(0x68),
+    Byte(0xD0),
+    Byte(0xBD),
+    Byte(0x67),
+    Byte(0xCE),
+    Byte(0x81),
+    Byte(0x1F),
+    Byte(0x3E),
+    Byte(0x7C),
+    Byte(0xF8),
+    Byte(0xED),
+    Byte(0xC7),
+    Byte(0x93),
+    Byte(0x3B),
+    Byte(0x76),
+    Byte(0xEC),
+    Byte(0xC5),
+    Byte(0x97),
+    Byte(0x33),
+    Byte(0x66),
+    Byte(0xCC),
+    Byte(0x85),
+    Byte(0x17),
+    Byte(0x2E),
+    Byte(0x5C),
+    Byte(0xB8),
+    Byte(0x6D),
+    Byte(0xDA),
+    Byte(0xA9),
+    Byte(0x4F),
+    Byte(0x9E),
+    Byte(0x21),
+    Byte(0x42),
+    Byte(0x84),
+    Byte(0x15),
+    Byte(0x2A),
+    Byte(0x54),
+    Byte(0xA8),
+    Byte(0x4D),
+    Byte(0x9A),
+    Byte(0x29),
+    Byte(0x52),
+    Byte(0xA4),
+    Byte(0x55),
+    Byte(0xAA),
+    Byte(0x49),
+    Byte(0x92),
+    Byte(0x39),
+    Byte(0x72),
+    Byte(0xE4),
+    Byte(0xD5),
+    Byte(0xB7),
+    Byte(0x73),
+    Byte(0xE6),
+    Byte(0xD1),
+    Byte(0xBF),
+    Byte(0x63),
+    Byte(0xC6),
+    Byte(0x91),
+    Byte(0x3F),
+    Byte(0x7E),
+    Byte(0xFC),
+    Byte(0xE5),
+    Byte(0xD7),
+    Byte(0xB3),
+    Byte(0x7B),
+    Byte(0xF6),
+    Byte(0xF1),
+    Byte(0xFF),
+    Byte(0xE3),
+    Byte(0xDB),
+    Byte(0xAB),
+    Byte(0x4B),
+    Byte(0x96),
+    Byte(0x31),
+    Byte(0x62),
+    Byte(0xC4),
+    Byte(0x95),
+    Byte(0x37),
+    Byte(0x6E),
+    Byte(0xDC),
+    Byte(0xA5),
+    Byte(0x57),
+    Byte(0xAE),
+    Byte(0x41),
+    Byte(0x82),
+    Byte(0x19),
+    Byte(0x32),
+    Byte(0x64),
+    Byte(0xC8),
+    Byte(0x8D),
+    Byte(0x07),
+    Byte(0x0E),
+    Byte(0x1C),
+    Byte(0x38),
+    Byte(0x70),
+    Byte(0xE0),
+    Byte(0xDD),
+    Byte(0xA7),
+    Byte(0x53),
+    Byte(0xA6),
+    Byte(0x51),
+    Byte(0xA2),
+    Byte(0x59),
+    Byte(0xB2),
+    Byte(0x79),
+    Byte(0xF2),
+    Byte(0xF9),
+    Byte(0xEF),
+    Byte(0xC3),
+    Byte(0x9B),
+    Byte(0x2B),
+    Byte(0x56),
+    Byte(0xAC),
+    Byte(0x45),
+    Byte(0x8A),
+    Byte(0x09),
+    Byte(0x12),
+    Byte(0x24),
+    Byte(0x48),
+    Byte(0x90),
+    Byte(0x3D),
+    Byte(0x7A),
+    Byte(0xF4),
+    Byte(0xF5),
+    Byte(0xF7),
+    Byte(0xF3),
+    Byte(0xFB),
+    Byte(0xEB),
+    Byte(0xCB),
+    Byte(0x8B),
+    Byte(0x0B),
+    Byte(0x16),
+    Byte(0x2C),
+    Byte(0x58),
+    Byte(0xB0),
+    Byte(0x7D),
+    Byte(0xFA),
+    Byte(0xE9),
+    Byte(0xCF),
+    Byte(0x83),
+    Byte(0x1B),
+    Byte(0x36),
+    Byte(0x6C),
+    Byte(0xD8),
+    Byte(0xAD),
+    Byte(0x47),
+    Byte(0x8E),
+    Byte(0x00),
+];
+
+pub const LOG8: [u8; 256] = [
+    0xFF, 0x00, 0x01, 0x19, 0x02, 0x32, 0x1A, 0xC6, 0x03, 0xDF, 0x33, 0xEE, 0x1B, 0x68, 0xC7, 0x4B,
+    0x04, 0x64, 0xE0, 0x0E, 0x34, 0x8D, 0xEF, 0x81, 0x1C, 0xC1, 0x69, 0xF8, 0xC8, 0x08, 0x4C, 0x71,
+    0x05, 0x8A, 0x65, 0x2F, 0xE1, 0x24, 0x0F, 0x21, 0x35, 0x93, 0x8E, 0xDA, 0xF0, 0x12, 0x82, 0x45,
+    0x1D, 0xB5, 0xC2, 0x7D, 0x6A, 0x27, 0xF9, 0xB9, 0xC9, 0x9A, 0x09, 0x78, 0x4D, 0xE4, 0x72, 0xA6,
+    0x06, 0xBF, 0x8B, 0x62, 0x66, 0xDD, 0x30, 0xFD, 0xE2, 0x98, 0x25, 0xB3, 0x10, 0x91, 0x22, 0x88,
+    0x36, 0xD0, 0x94, 0xCE, 0x8F, 0x96, 0xDB, 0xBD, 0xF1, 0xD2, 0x13, 0x5C, 0x83, 0x38, 0x46, 0x40,
+    0x1E, 0x42, 0xB6, 0xA3, 0xC3, 0x48, 0x7E, 0x6E, 0x6B, 0x3A, 0x28, 0x54, 0xFA, 0x85, 0xBA, 0x3D,
+    0xCA, 0x5E, 0x9B, 0x9F, 0x0A, 0x15, 0x79, 0x2B, 0x4E, 0xD4, 0xE5, 0xAC, 0x73, 0xF3, 0xA7, 0x57,
+    0x07, 0x70, 0xC0, 0xF7, 0x8C, 0x80, 0x63, 0x0D, 0x67, 0x4A, 0xDE, 0xED, 0x31, 0xC5, 0xFE, 0x18,
+    0xE3, 0xA5, 0x99, 0x77, 0x26, 0xB8, 0xB4, 0x7C, 0x11, 0x44, 0x92, 0xD9, 0x23, 0x20, 0x89, 0x2E,
+    0x37, 0x3F, 0xD1, 0x5B, 0x95, 0xBC, 0xCF, 0xCD, 0x90, 0x87, 0x97, 0xB2, 0xDC, 0xFC, 0xBE, 0x61,
+    0xF2, 0x56, 0xD3, 0xAB, 0x14, 0x2A, 0x5D, 0x9E, 0x84, 0x3C, 0x39, 0x53, 0x47, 0x6D, 0x41, 0xA2,
+    0x1F, 0x2D, 0x43, 0xD8, 0xB7, 0x7B, 0xA4, 0x76, 0xC4, 0x17, 0x49, 0xEC, 0x7F, 0x0C, 0x6F, 0xF6,
+    0x6C, 0xA1, 0x3B, 0x52, 0x29, 0x9D, 0x55, 0xAA, 0xFB, 0x60, 0x86, 0xB1, 0xBB, 0xCC, 0x3E, 0x5A,
+    0xCB, 0x59, 0x5F, 0xB0, 0x9C, 0xA9, 0xA0, 0x51, 0x0B, 0xF5, 0x16, 0xEB, 0x7A, 0x75, 0x2C, 0xD7,
+    0x4F, 0xAE, 0xD5, 0xE9, 0xE6, 0xE7, 0xAD, 0xE8, 0x74, 0xD6, 0xF4, 0xEA, 0xA8, 0x50, 0x58, 0xAF,
+];

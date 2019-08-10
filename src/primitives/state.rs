@@ -6,12 +6,7 @@ pub struct State([word::Word; 4]);
 
 impl State {
     pub fn col(&self, idx: usize) -> word::Word {
-        let mut buf: [byte::Byte; 4] = [
-            byte::Byte::zero(),
-            byte::Byte::zero(),
-            byte::Byte::zero(),
-            byte::Byte::zero()
-        ];
+        let mut buf: [byte::Byte; 4] = [byte::Byte::from(0); 4];
         for i in 0..4 {
             buf[i] = self[i][idx]
         }
@@ -120,7 +115,7 @@ impl From<[byte::Byte;16]> for State {
 
 impl From<[u8;16]> for State {
     fn from(long_form: [u8; 16]) -> Self {
-        let mut buf: [byte::Byte; 16] = [byte::Byte::zero(); 16];
+        let mut buf: [byte::Byte; 16] = [byte::Byte::from(0); 16];
         for (idx,byte) in buf.iter_mut().enumerate() {
             *byte = byte::Byte::from(long_form[idx])
         }
@@ -217,8 +212,8 @@ mod test {
     #[test]
     fn test_index() {
         let state: _ = State::test_vector();
-        assert_eq!(15, state[3][3]);
-        assert_eq!(9, state[2][1]);
+        assert_eq!(byte::Byte::from(15), state[3][3]);
+        assert_eq!(byte::Byte::from(9), state[2][1]);
     }
 
     #[test]
@@ -241,7 +236,7 @@ mod test {
     fn test_map_to_col() {
         let mut state: _ = State::test_vector();
         let exp: _ = word::Word::from([6,14,22,30]);
-        state.map_to_col(3, |x| x*2);
+        state.map_to_col(3, |x| x * 2.into());
         assert_eq!(state.col(3), exp)
     }
 
@@ -250,7 +245,7 @@ mod test {
     fn test_map_to_row() {
         let mut state: _ = State::test_vector();
         let exp: _ = word::Word::from([24,26,28,30]);
-        state.map_to_row(3, |x| x*2);
+        state.map_to_row(3, |x| x * 2.into());
         assert_eq!(state.row(3), exp)
     }
 

@@ -64,19 +64,19 @@ mod test {
     #[test]
     fn test_index() {
         let sbox: _ = SubBox::default();
-        assert_eq!(0xea, sbox[0xbb]);
-        assert_eq!(0x8c, sbox[0xf0]);
-        assert_eq!(0x24, sbox[0xa6]);
-        assert_eq!(0xbc, sbox[0x78]);
+        assert_eq!(byte::Byte::from(0xea), sbox[0xbb]);
+        assert_eq!(byte::Byte::from(0x8c), sbox[0xf0]);
+        assert_eq!(byte::Byte::from(0x24), sbox[0xa6]);
+        assert_eq!(byte::Byte::from(0xbc), sbox[0x78]);
     }
 
     #[test]
     fn test_substitute() {
         let sbox: _ = SubBox::default();
-        assert_eq!(0xea, sbox.substitute(byte::Byte::from(0xbb)));
-        assert_eq!(0x8c, sbox.substitute(byte::Byte::from(0xf0)));
-        assert_eq!(0x24, sbox.substitute(byte::Byte::from(0xa6)));
-        assert_eq!(0xbc, sbox.substitute(byte::Byte::from(0x78)));
+        assert_eq!(byte::Byte::from(0xea), sbox.substitute(byte::Byte::from(0xbb)));
+        assert_eq!(byte::Byte::from(0x8c), sbox.substitute(byte::Byte::from(0xf0)));
+        assert_eq!(byte::Byte::from(0x24), sbox.substitute(byte::Byte::from(0xa6)));
+        assert_eq!(byte::Byte::from(0xbc), sbox.substitute(byte::Byte::from(0x78)));
     }
 
 }

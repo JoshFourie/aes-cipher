@@ -1,27 +1,32 @@
-use crate::primitives::{sbox, state, byte, word};
+use crate::primitives::{sbox, state, byte};
 
-pub struct RoundFunction {
+pub struct Round {
     sbox: sbox::SubBox,
-    skey: state::State,
     state: state::State
 }
 
-impl RoundFunction {
-    pub fn new(skey: state::State, state: state::State) -> Self {
-        Self {
-            skey, 
+impl Round {
+    pub fn new(state: state::State) -> Self {
+        Round {
             state,
             sbox: sbox::SubBox::default()
         }
     }
 
-    pub fn round_function(self) -> Self {
-        self.sub_and_shift()
+    pub fn next(&mut self, skey: &state::State) -> &state::State {
+        &self.sub_and_shift()
             .mix()
-            .xor_with_key()
+            .xor_with_key(skey)
+            .state
     }
 
-    fn sub_and_shift(mut self) -> Self {
+    pub fn last(mut self, skey: &state::State) -> state::State {
+        self.sub_and_shift()
+            .xor_with_key(skey)
+            .swap_state()
+    }
+
+    fn sub_and_shift(&mut self) -> &mut Self {
         self.state = self.swap_state()
             .into_rows()
             .enumerate()
@@ -30,7 +35,7 @@ impl RoundFunction {
         self
     }
 
-    fn mix(mut self) -> Self {
+    fn mix(&mut self) -> &mut Self {
         let perm: _ = state::State::from([
             0x02, 0x03, 0x01, 0x01,
             0x01, 0x02, 0x03, 0x01,
@@ -41,7 +46,7 @@ impl RoundFunction {
             let mut buf: _ = state::State::default();
             for i in 0..4 {
                 for j in 0..4 {
-                    let mut sigma: _ = byte::Byte::zero();
+                    let mut sigma: _ = byte::Byte::from(0);
                     for k in 0..4 {
                         sigma = sigma + (perm[i][k] * self.state[k][j])
                     }
@@ -53,8 +58,8 @@ impl RoundFunction {
         self
     }
 
-    fn xor_with_key(mut self) -> Self {
-        self.state = self.state ^ self.skey.clone();
+    fn xor_with_key(&mut self, skey: &state::State) -> &mut Self {
+        self.state = self.swap_state() ^ skey.clone();
         self
     }
 
@@ -90,7 +95,7 @@ mod tests {
             0x46, 0xe7, 0x4a, 0xc3,
             0xa6, 0x8c, 0xd8, 0x95
         ]);
-        let rf: _ = RoundFunction::new(state::State::default(), initial);
+        let mut rf: _ = Round::new(initial);
         let test: _ = rf.mix();
         let exp: _ = state::State::from([
             0x47, 0x40, 0xa3, 0x4c,
@@ -111,7 +116,7 @@ mod tests {
             0x34, 0x25, 0x17, 0x55,
             0xae, 0xb6, 0x4e, 0x88
         ]);
-        let rf: _ = RoundFunction::new(state::State::default(), initial);
+        let mut rf: _ = Round::new(initial);
         let test: _ = rf.sub_and_shift();
         let exp: _ = state::State::from([
             0xab, 0x8b, 0x89, 0x35,

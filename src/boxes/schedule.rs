@@ -1,24 +1,24 @@
 use crate::primitives::{sbox,state,byte,word};
 
-pub struct KeyScheduleFunction {
+pub struct KeySchedule {
     key: state::State,
     sbox: sbox::SubBox,
     rcon: RCON
 }
 
-impl KeyScheduleFunction {
+impl KeySchedule {
 
     const TMP_COL: usize = 3;
 
     pub fn new(key: state::State) -> Self {
-        Self {
+        KeySchedule {
             key,
             sbox: sbox::SubBox::default(),
             rcon: RCON::default()
         }
     }
 
-    pub fn update(&mut self) -> &state::State {
+    pub fn next(&mut self) -> &state::State {
         let tmp: word::Word = self.tmp();
         self.key = self.chain_xor(tmp);
         &self.key
@@ -53,7 +53,7 @@ struct RCON(byte::Byte);
 impl RCON {
     fn update(&mut self) -> &Self {
         let RCON(inner) = self;
-        *inner = *inner * 2_u8;
+        *inner = *inner * byte::Byte::from(2);
         self
     }
 
@@ -101,13 +101,13 @@ mod test {
     #[test]
     fn test_chain_xor() {
         // starting on second round.
-        let mut ksf: KeyScheduleFunction = {
+        let mut ksf: KeySchedule = {
             let w4: _ = word::Word::from([0xdc, 0x90, 0x37, 0xb0]);
             let w5: _ = word::Word::from([0x9b, 0x49, 0xdf, 0xe9]);
             let w6: _ = word::Word::from([0x97, 0xfe, 0x72, 0x3f]);
             let w7: _ = word::Word::from([0x38, 0x81, 0x15, 0xa7]);
             let key: _ = state::State::from([w4,w5,w6,w7]);
-            let mut ksf: _ = KeyScheduleFunction::new(key);
+            let mut ksf: _ = KeySchedule::new(key);
             ksf.rcon.update();
             ksf
         };

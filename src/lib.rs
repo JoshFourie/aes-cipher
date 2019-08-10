@@ -1,19 +1,32 @@
 #![warn(clippy::all)]
 
 mod boxes;
-mod key;
-mod text;
 mod primitives;
 
-use boxes::{round, schedule};
+use primitives::{state};
 
-pub struct AES128 {
-    pub plaintext: text::Plain,
-    pub key: key::Key,
-    internal: AES128Internal
+#[derive(Debug)]
+pub struct RjindaelCipher {
+    text: state::State,
+    key: state::State,
 }
 
-struct AES128Internal {
-    round: round::RoundFunction,
-    schedule: schedule::KeyScheduleFunction
+impl RjindaelCipher {
+    fn new(text: state::State, key: state::State) -> Self {
+        Self { text, key }
+    }
+
+    fn encrypt(self) -> state::State {
+        let mut ksf: _ = boxes::KeySchedule::new(self.key);
+        let mut rnd: _ = boxes::Round::new(self.text);
+
+        for _ in 0..9 {
+            let skey: _ = ksf.next();
+            rnd.next(skey);
+        }
+        let last_key: _ = ksf.next();
+        let cipher: _ = rnd.last(last_key);
+
+        cipher
+    }
 }
