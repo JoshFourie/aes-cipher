@@ -29,4 +29,18 @@ impl RjindaelCipher {
 
         cipher
     }
+
+    fn decrypt(self) -> state::State {
+        let mut rksf: _ = boxes::ReverseKeySchedule::new(self.key);
+        let mut rrnd: _ = boxes::ReverseRound::new(self.text);
+
+        for _ in 0..9 {
+            let skey: _ = rksf.next();
+            rrnd.next(&skey);
+        }
+        let initial_key: _ = rksf.next();
+        let plain: _ = rrnd.last(&initial_key);
+
+        plain
+    }
 }

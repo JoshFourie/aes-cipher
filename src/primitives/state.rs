@@ -56,6 +56,21 @@ impl State {
         self
     }
 
+    pub fn mix(&mut self, rhs: State) -> &mut Self {
+        let mut state: _ = State::default();
+        for i in 0..4 {
+            for j in 0..4 {
+                let mut sigma: _ = byte::Byte::from(0);
+                for k in 0..4 {
+                    sigma = sigma + (rhs[i][k] * self[k][j])
+                }
+                state[i][j] = sigma
+            }
+        }  
+        *self = state;
+        self
+    }
+
     pub fn transpose(mut self) -> Self {
         for i in 0..4 {
             for j in i..4 {

@@ -42,19 +42,7 @@ impl Round {
             0x01, 0x01, 0x02, 0x03,
             0x03, 0x01, 0x01, 0x02
         ]);
-        self.state = {
-            let mut buf: _ = state::State::default();
-            for i in 0..4 {
-                for j in 0..4 {
-                    let mut sigma: _ = byte::Byte::from(0);
-                    for k in 0..4 {
-                        sigma = sigma + (perm[i][k] * self.state[k][j])
-                    }
-                    buf[i][j] = sigma
-                }
-            }  
-            buf
-        };
+        self.state.mix(perm);
         self
     }
 
@@ -66,6 +54,62 @@ impl Round {
     fn swap_state(&mut self) -> state::State {
         std::mem::replace(&mut self.state, state::State::default())
     } 
+}
+
+pub struct ReverseRound {
+    rsbox: sbox::ReverseSubBox,
+    state: state::State
+}
+
+impl ReverseRound {
+    pub fn new(state: state::State) -> Self {
+        ReverseRound {
+            state,
+            rsbox: sbox::ReverseSubBox::default()
+        }
+    }
+
+    pub fn next(&mut self, skey: &state::State) -> &state::State {
+        &self.sub_and_shift()
+            .mix()
+            .xor_with_key(skey)
+            .state
+    }
+
+    pub fn last(mut self, skey: &state::State) -> state::State {
+        self.sub_and_shift()
+            .xor_with_key(skey)
+            .swap_state()
+    }
+
+    fn sub_and_shift(&mut self) -> &mut Self {
+        self.state = self.swap_state()
+            .into_rows()
+            .enumerate()
+            .map(|(idx, row)| row.substitute(&self.rsbox) >> idx)
+            .collect();
+        self
+    }
+
+    fn mix(&mut self) -> &mut Self {
+        let perm: _ = state::State::from([
+            0xe, 0xb, 0xd, 0x9,
+            0x9, 0xe, 0xb, 0xd,
+            0xd, 0x9, 0xe, 0xb,      
+            0xb, 0xd, 0x9, 0xe
+        ]);
+        self.state.mix(perm);
+        self
+    }
+
+    fn swap_state(&mut self) -> state::State {
+        std::mem::replace(&mut self.state, state::State::default())
+    } 
+
+    fn xor_with_key(&mut self, skey: &state::State) -> &mut Self {
+        self.state = self.swap_state() ^ skey.clone();
+        self
+    }
 }
 
 #[cfg(test)]

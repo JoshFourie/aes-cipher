@@ -48,6 +48,33 @@ impl KeySchedule {
     }
 }
 
+pub struct ReverseKeySchedule {
+    keys: Vec<state::State>,
+    counter: usize
+}
+
+impl ReverseKeySchedule {
+    pub fn new(key: state::State) -> Self {
+        let mut ksf: _ = KeySchedule::new(key);
+        let mut keys: Vec<state::State> = Vec::new();
+        for _ in 0..9 {
+            keys.push(ksf.next().clone())
+        }
+        keys.reverse();
+
+        Self {
+            keys,
+            counter: 9
+        }
+    }
+
+    pub fn next(&mut self) -> state::State {
+        let key: _ = self.keys.remove(self.counter);
+        self.counter -= 1;
+        key
+    }
+}
+
 struct RCON(byte::Byte);
 
 impl RCON {

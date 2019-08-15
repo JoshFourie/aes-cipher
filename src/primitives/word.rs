@@ -16,9 +16,12 @@ impl Word {
         self << 1
     }
 
-    pub fn substitute(mut self, sbox: &sbox::SubBox) -> Self {
+    pub fn substitute<T>(mut self, sbox: T) -> Self 
+    where
+        T: ops::Index<byte::Byte, Output=byte::Byte>
+    {
         for val in self.iter_mut() {
-            *val = sbox.substitute(*val)
+            *val = sbox[*val]
         }
         self
     }
@@ -38,6 +41,21 @@ impl ops::Shl<usize> for Word {
             self[1] = self[2];
             self[2] = self[3];
             self[3] = buf;
+        }
+        self 
+    }
+}
+
+impl ops::Shr<usize> for Word {
+    type Output = Self;
+
+    fn shr(mut self, rhs: usize) -> Self::Output {
+        for _ in 0..rhs {
+            let buf: _ = self[3];
+            self[3] = self[2];
+            self[2] = self[1];
+            self[1] = self[0];
+            self[0] = buf;
         }
         self 
     }
@@ -151,7 +169,15 @@ mod test {
     #[test]
     fn test_shl() {
         let test: _ = Word::from([0xaf, 0x7f, 0x67, 0x98]);
-        let exp: _ = Word::from([0x67, 0x98, 0xaf, 0x7f]);
-        assert_eq!(test << 2, exp)
+        let exp: _ = Word::from([0x7f, 0x67, 0x98, 0xaf]);
+        assert_eq!(test << 1, exp)
+    }
+
+    #[test]
+    fn test_shr() {
+
+        let test: _ = Word::from([0xaf, 0x7f, 0x67, 0x98]);
+        let exp: _ = Word::from([0x98, 0xaf, 0x7f, 0x67]);
+        assert_eq!(test >> 1, exp)
     }
 }

@@ -1,5 +1,5 @@
 mod round;
 mod schedule;
 
-pub use round::Round;
-pub use schedule::KeySchedule;
+pub use round::{ReverseRound, Round};
+pub use schedule::{KeySchedule, ReverseKeySchedule};
